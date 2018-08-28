@@ -1,0 +1,23 @@
+{
+  "name": "steamcord2",
+  "version": "1.0.0",
+  "description": "Steam to Discord. Because Steam's social features are (still) genetically inferior.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antigravities/Steamcord.git"
+  },
+  "author": "Alexandra Frock <alexandra@cutie.cafe>",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/antigravities/Steamcord/issues"
+  },
+  "homepage": "https://github.com/antigravities/Steamcord#readme",
+  "dependencies": {
+    "discord.js": "^11.4.2",
+    "steam-user": "^3.28.1"
+  }
+}
