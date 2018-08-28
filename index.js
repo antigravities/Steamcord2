@@ -1,5 +1,3 @@
-// https://discordapp.com/api/oauth2/authorize?client_id=483821022819385345&permissions=1610754160&scope=bot
-
 (async() => {
   const fs = require("fs");
 
