@@ -69,3 +69,51 @@ module.exports.notifications = pkg => {
 module.exports.help = pkg => {
   return "Commands: " + Object.keys(module.exports).join(", ");
 }
+
+module.exports.friends = async pkg => {
+  let names = [];
+  let friendsByState = {};
+
+  pkg.util.personaStates.forEach((i, j) => friendsByState[j] = []);
+
+  friendsByState.push(friendsByState.shift()); // put "Offline" (0) last
+
+  Object.keys(pkg.steam.myFriends).forEach(i => {
+    if (pkg.steam.myFriends[i] !== pkg.Steam.EFriendRelationship.Friend) return;
+    friendsByState[(pkg.steam.users[i] && pkg.steam.users[i].persona_state) ? pkg.steam.users[i].persona_state : 0].push((pkg.steam.users[i] ? pkg.steam.users[i].player_name.replace(new RegExp("_", "g"), "\\_") : i));
+  });
+
+  let embed = {};
+  embed.fields = [];
+
+  Object.keys(friendsByState).forEach(i => {
+    let final = friendsByState[i].join(", ");
+
+    if (final.length < 1024) final = [final];
+    else {
+      let comb = [];
+
+      while (final.length > 0) {
+        let sect = final.substring(0, 1024);
+        comb.push(sect);
+        final = final.slice(1024);
+      }
+
+      final = comb;
+    }
+
+    final.forEach((j, k) => {
+      embed.fields.push({
+        name: pkg.util.personaStates[i] + (k > 0 ? " (continued)" : ""),
+        value: j.length === 0 ? "(none)" : j
+      });
+    });
+  });
+
+  pkg.message.channel.send("", { embed: embed });
+}
+
+module.exports.offers = pkg => {
+  pkg.database.set("offers", pkg.message.channel.id);
+  return "Offers will be sent to this channel.";
+}

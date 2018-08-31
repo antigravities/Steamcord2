@@ -23,11 +23,14 @@
 
   const Steam = require("steam-user");
   const Discord = require("discord.js");
+  const TradeOffers = require("steam-tradeoffer-manager");
 
   const discord = new Discord.Client();
   const steam = new Steam({ promptSteamGuardCode: false });
+  let tradeoffers = null;
 
   const Commands = require("./commands.js");
+
 
   // -----------
 
@@ -65,12 +68,12 @@
     if (!cache.discordReady) return;
     if (util.feedCache.length < 1) return;
 
-    let item = util.feedCache.pop();
+    let item = util.feedCache.shift();
 
     if (database.get("feeds")[item.feed]) {
       discord.channels.get(database.get("feeds")[item.feed]).send(item.message);
     }
-  }, 5000);
+  }, 1000);
 
   util.waitUntilDiscordBack = () => {
     return new Promise(resolve => {
@@ -209,9 +212,11 @@
     });
   };
 
+  util.personaStates = ["Offline", "Online", "Busy", "Away", "Snooze", "Looking to Trade", "Looking to Play"];
+
   // -----------
 
-  discord.on("ready", () => {
+  discord.on("ready", async() => {
     cache.discordReady = true;
 
     cache.mGuild = discord.guilds.get(config.discord.guild);
@@ -220,6 +225,16 @@
 
     if (!cache.loggedOn) {
       steam.logOn(config.steam);
+    }
+
+
+    if (database.get("offers", false)) {
+      let offers = Object.values(database.get("offerData", {}));
+
+      // so that we get reactions
+      offers.forEach(i => {
+        discord.channels.get(database.get("offers")).fetchMessages({ around: i, limit: 1 });
+      });
     }
   });
 
@@ -230,8 +245,8 @@
     let master = await cache.mGuild.members.get(config.discord.master);
 
     if (master.presence) {
-      if (master.game) {
-        steam.gamesPlayed(master.game.name);
+      if (master.presence.game) {
+        steam.gamesPlayed(master.presence.game.name);
       }
       else {
         steam.gamesPlayed(0);
@@ -283,7 +298,8 @@
         args: command,
         database: database,
         cache: cache,
-        util: util
+        util: util,
+        Steam: Steam
       };
 
       let response = Commands[command[0]] ? (await Commands[command[0]](pkg)) : (await Commands.unknown(pkg));
@@ -301,7 +317,9 @@
   });
 
   discord.on("channelCreate", channel => {
-    channel.send("", { embed: { title: "Never tell your password to anyone.", url: "https://support.steampowered.com/kb_article.php?p_faqid=301", description: "Click [here](https://support.steampowered.com/kb_article.php?p_faqid=301) for more account security recommendations.", footer: "Only you can see this" } });
+    if (typeof channel.send === "function") {
+      channel.send("", { embed: { title: "Never tell your password to anyone.", url: "https://support.steampowered.com/kb_article.php?p_faqid=301", description: "Click [here](https://support.steampowered.com/kb_article.php?p_faqid=301) for more account security recommendations.", footer: "Only you can see this" } });
+    }
   });
 
   discord.on("typingStart", (channel, user) => {
@@ -309,6 +327,79 @@
 
     let steamid = util.getSteamIDFromChan(channel);
     if (steamid) steam.chatTyping(steamid);
+  });
+
+  discord.on("messageReactionAdd", async(rxn, user) => {
+    if (user.bot) return;
+
+    let offersdb = database.get("offerData", {});
+    let offers = Object.keys(offersdb);
+
+    for (let i = 0; i < offers.length; i++) {
+      if (offersdb[offers[i]] != rxn.message.id) continue;
+
+      tradeoffers.getOffer(offers[i], async(err, offer) => {
+        if (err) rxn.remove();
+
+        if (offer.state !== TradeOffers.ETradeOfferState.Active) {
+          //await rxn.remove();
+          await rxn.message.edit("", {
+            embed: {
+              title: "Trade offer " + TradeOffers.ETradeOfferState[offer.state].toLowerCase(),
+              description: "This trade offer can not be accepted or declined because it is no longer active."
+            }
+          });
+
+          await rxn.message.clearReactions();
+
+          delete offersdb[offers[i]];
+        }
+        else if (rxn.emoji.name === "✅") {
+          offer.accept(false, async(err, status) => {
+            if (err) {
+              //await rxn.remove();
+              return;
+            }
+
+            let extraData = "";
+
+            if (status === "pending") extraData = "Check your Mobile Authenticator or e-mail inbox to verify.";
+            else if (status === "escrow") extraData = "This trade offer is in escrow.";
+            else extraData = "Trade offer accepted!";
+
+            let embed = new Discord.RichEmbed(rxn.message.embeds[0]);
+            embed.setTitle("✅ Trade offer accepted!");
+            embed.setDescription("**" + extraData + "**\n\n" + embed.description);
+
+            await rxn.message.edit("", { embed: embed });
+            await rxn.message.clearReactions();
+          });
+
+          delete offersdb[offers[i]];
+        }
+        else if (rxn.emoji.name === "❌") {
+          offer.decline(async(err) => {
+            if (err) {
+              //await rxn.remove();
+              return;
+            }
+
+            let embed = new Discord.RichEmbed(rxn.message.embeds[0]);
+            embed.setTitle("❌ Trade offer declined!");
+
+            await rxn.message.edit("", { embed: embed });
+
+            await rxn.message.clearReactions();
+          });
+
+          delete offersdb[offers[i]];
+        }
+
+        database.set("offerData", offersdb);
+      });
+
+      break;
+    }
   });
 
   // -----------
@@ -322,7 +413,78 @@
     cache.needs2FA = false;
     cache.steamReady = true;
 
+    tradeoffers = new TradeOffers({
+      steam: steam,
+      domain: "steamcord.cutie.cafe",
+      language: "en",
+      pollInterval: 15000
+    });
+
+    tradeoffers.on("newOffer", async offer => {
+      if (!database.get("offers", false) || offer.isGlitched()) return;
+
+      let data = database.get("offerData", {});
+
+      if (data[offer.id]) return;
+
+      steam.webLogOn();
+
+      setTimeout(() => {
+        offer.getUserDetails(async(err, me, them) => {
+          if (err) {
+            them = {
+              personaName: offer.partner.toString(),
+              avatarFull: "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg",
+              escrowDays: -1
+            };
+          }
+
+          let escrowString = "";
+
+          if (them.escrowDays === -1) escrowString = "Unable to obtain escrow information";
+          else if (them.escrowDays > 0) escrowString = "This trade will be held for " + them.escrowDays + " days";
+
+          let strs = [offer.itemsToGive, offer.itemsToReceive].map(i => {
+            return i.map(j => {
+              return (j.amount > 1 ? j.amount + " " : "") + j.name + " (" + j.type + ")";
+            }).join(", ");
+          });
+
+          let msg = await discord.channels.get(database.get("offers")).send("", {
+            embed: {
+              title: them.personaName + " offered you a trade:",
+              url: "https://steamcommunity.com/tradeoffers/" + offer.id,
+              description: (escrowString.length > 0 ? escrowString + "\n\n" : "") + (offer.message.length > 0 ? offer.message : "*no offer message*"),
+              fields: [{
+                  "name": them.personaName + " offered:",
+                  value: strs[1].length > 0 ? strs[1] : "*nothing*"
+                },
+                {
+                  "name": "For your:",
+                  value: strs[0].length > 0 ? strs[0] : "*nothing*"
+                }
+              ]
+            }
+          });
+
+
+          data[offer.id] = msg.id;
+
+          msg.react("✅");
+          msg.react("❌");
+
+          database.set("offerData", data);
+        });
+      }, 15000);
+    });
+
     util.sendToFeed("debug", "Connected to Steam.");
+  });
+
+  steam.on("webSession", (sid, cookies) => {
+    tradeoffers.setCookies(cookies, err => {
+      if (err) console.log("error getting api key");
+    });
   });
 
   steam.on("disconnected", () => {
@@ -350,11 +512,13 @@
 
   steam.on("newItems", count => util.updateNotificationMessages("items", count));
   steam.on("newComments", count => util.updateNotificationMessages("comments", count));
-  steam.on("tradeOffers", count => util.updateNotificationMessages("offers", count));
   steam.on("communityMessages", count => util.updateNotificationMessages("community", count));
   steam.on("offlineMessages", count => util.updateNotificationMessages("offline", count));
+  steam.on("tradeOffers", count => util.updateNotificationMessages("offers", count));
 
   steam.on("friendRelationship", (steamid, relationship) => {
+    if (relationship === Steam.EFriendRelationship.RequestInitiator) return; // the user knows they added someone
+
     let status;
 
     if (relationship === Steam.EFriendRelationship.None) status = "removed";

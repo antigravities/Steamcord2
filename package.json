@@ -18,6 +18,7 @@
   "homepage": "https://github.com/antigravities/Steamcord#readme",
   "dependencies": {
     "discord.js": "^11.4.2",
+    "steam-tradeoffer-manager": "^2.9.4",
     "steam-user": "^3.28.1"
   }
 }
