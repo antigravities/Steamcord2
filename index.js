@@ -98,7 +98,7 @@
     let chats = database.get("chats");
 
     return chats[steamid] ? false : chats[steamid];
-  }
+  };
 
   util.createOrGetFriendChat = async steamid => {
     await util.waitUntilDiscordBack();
@@ -136,7 +136,7 @@
     }
 
     return false;
-  }
+  };
 
   util.sendFromFriend = async(steamid, message) => {
     let chan = await util.createOrGetFriendChat(steamid);
@@ -169,7 +169,7 @@
     }
 
     return await chan.hook.send(message, { username: steam.users[steamid].player_name, avatarURL: steam.users[steamid].avatar_url_full });
-  }
+  };
 
   util.notifications = {
     items: 0,
@@ -178,7 +178,7 @@
     offers: 0,
     community: 0,
     offline: 0
-  }
+  };
 
   util.updateNotificationMessages = async(type, count) => {
     if (!database.get("notification", false)) return;
@@ -213,6 +213,49 @@
   };
 
   util.personaStates = ["Offline", "Online", "Busy", "Away", "Snooze", "Looking to Trade", "Looking to Play"];
+
+  util.getFriendList = () => {
+    let friendsByState = {};
+
+    util.personaStates.forEach((i, j) => friendsByState[j] = []);
+
+    Object.keys(steam.myFriends).forEach(i => {
+      if (steam.myFriends[i] !== Steam.EFriendRelationship.Friend) return;
+      friendsByState[(steam.users[i] && steam.users[i].persona_state) ? steam.users[i].persona_state : 0].push((steam.users[i] ? steam.users[i].player_name.replace(new RegExp("_", "g"), "\\_") : i));
+    });
+
+    let embed = {};
+    embed.fields = [];
+
+    let states = Object.keys(friendsByState);
+    states.push(states.shift());
+
+    states.forEach(i => {
+      let final = friendsByState[i].join(", ");
+
+      if (final.length < 1024) final = [final];
+      else {
+        let comb = [];
+
+        while (final.length > 0) {
+          let sect = final.substring(0, 1024);
+          comb.push(sect);
+          final = final.slice(1024);
+        }
+
+        final = comb;
+      }
+
+      final.forEach((j, k) => {
+        embed.fields.push({
+          name: util.personaStates[i] + (k > 0 ? " (continued)" : ""),
+          value: j.length === 0 ? "(none)" : j
+        });
+      });
+    });
+
+    return embed;
+  };
 
   // -----------
 
@@ -477,6 +520,15 @@
         });
       }, 15000);
     });
+
+    setInterval(async() => {
+      if (!database.get("friendchan", false)) return;
+
+      let message = (await discord.channels.get(database.get("friendchan")).fetchMessages({ around: database.get("friendmsg"), limit: 1 })).first();
+
+      message.edit("", { embed: util.getFriendList() });
+
+    }, 15000);
 
     util.sendToFeed("debug", "Connected to Steam.");
   });
