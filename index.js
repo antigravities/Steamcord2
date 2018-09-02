@@ -39,7 +39,9 @@
   cache.needs2FA = false;
   cache.discordReady = false;
   cache.steamReady = false;
+  cache.webLoggingOn = false;
   cache.typing = {};
+  cache.offers = [];
 
   // -----------
 
@@ -400,7 +402,6 @@
         else if (rxn.emoji.name === "✅") {
           offer.accept(false, async(err, status) => {
             if (err) {
-              //await rxn.remove();
               return;
             }
 
@@ -408,11 +409,10 @@
 
             if (status === "pending") extraData = "Check your Mobile Authenticator or e-mail inbox to verify.";
             else if (status === "escrow") extraData = "This trade offer is in escrow.";
-            else extraData = "Trade offer accepted!";
 
             let embed = new Discord.RichEmbed(rxn.message.embeds[0]);
             embed.setTitle("✅ Trade offer accepted!");
-            embed.setDescription("**" + extraData + "**\n\n" + embed.description);
+            embed.setDescription((extraData.length > 0 ? "**" + extraData + "**\n\n" : "") + embed.description);
 
             await rxn.message.edit("", { embed: embed });
             await rxn.message.clearReactions();
@@ -423,7 +423,6 @@
         else if (rxn.emoji.name === "❌") {
           offer.decline(async(err) => {
             if (err) {
-              //await rxn.remove();
               return;
             }
 
@@ -460,7 +459,12 @@
       steam: steam,
       domain: "steamcord.cutie.cafe",
       language: "en",
-      pollInterval: 15000
+      pollInterval: 15000,
+      pollData: database.get("tpoll", {})
+    });
+
+    tradeoffers.on("pollData", data => {
+      database.set("tpoll", data);
     });
 
     tradeoffers.on("newOffer", async offer => {
@@ -470,9 +474,41 @@
 
       if (data[offer.id]) return;
 
-      steam.webLogOn();
+      cache.offers.push(offer);
 
-      setTimeout(() => {
+      // force this every time so that we get a fresh session (unless we're already logging on)
+      // apps like ASF like to get sessions randomly and screw us up
+      if (!cache.webLoggingOn) {
+        steam.webLogOn();
+        cache.webLoggingOn = true;
+      }
+    });
+
+    setInterval(async() => {
+      if (!database.get("friendchan", false)) return;
+
+      let message = (await discord.channels.get(database.get("friendchan")).fetchMessages({ around: database.get("friendmsg"), limit: 1 })).first();
+
+      message.edit("", { embed: util.getFriendList() });
+
+    }, 15000);
+
+    util.sendToFeed("debug", "Connected to Steam.");
+  });
+
+  steam.on("webSession", (sid, cookies) => {
+    tradeoffers.setCookies(cookies, err => {
+      if (err) console.log("error getting api key");
+
+      cache.webLoggingOn = false;
+
+      let data = database.get("offerData", {});
+
+      while (cache.offers.length > 0) {
+        // we shouldn't have more than a couple of offers at a time, so this should work
+        // TODO: make this less garbaggio
+        let offer = cache.offers.shift();
+
         offer.getUserDetails(async(err, me, them) => {
           if (err) {
             them = {
@@ -497,7 +533,7 @@
             embed: {
               title: them.personaName + " offered you a trade:",
               url: "https://steamcommunity.com/tradeoffers/" + offer.id,
-              description: (escrowString.length > 0 ? escrowString + "\n\n" : "") + (offer.message.length > 0 ? offer.message : "*no offer message*"),
+              description: (escrowString.length > 0 ? escrowString + "\n\n" : "") + (offer.message.length > 0 ? offer.message : ""),
               fields: [{
                   "name": them.personaName + " offered:",
                   value: strs[1].length > 0 ? strs[1] : "*nothing*"
@@ -506,10 +542,12 @@
                   "name": "For your:",
                   value: strs[0].length > 0 ? strs[0] : "*nothing*"
                 }
-              ]
+              ],
+              thumbnail: {
+                url: them.avatarFull
+              }
             }
           });
-
 
           data[offer.id] = msg.id;
 
@@ -518,24 +556,7 @@
 
           database.set("offerData", data);
         });
-      }, 15000);
-    });
-
-    setInterval(async() => {
-      if (!database.get("friendchan", false)) return;
-
-      let message = (await discord.channels.get(database.get("friendchan")).fetchMessages({ around: database.get("friendmsg"), limit: 1 })).first();
-
-      message.edit("", { embed: util.getFriendList() });
-
-    }, 15000);
-
-    util.sendToFeed("debug", "Connected to Steam.");
-  });
-
-  steam.on("webSession", (sid, cookies) => {
-    tradeoffers.setCookies(cookies, err => {
-      if (err) console.log("error getting api key");
+      }
     });
   });
 
