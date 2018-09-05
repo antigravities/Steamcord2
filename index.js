@@ -41,7 +41,9 @@
   cache.steamReady = false;
   cache.webLoggingOn = false;
   cache.typing = {};
-  cache.offers = [];
+  cache.poffers = [];
+  cache.aoffers = [];
+  cache.feedLastMessages = {};
 
   // -----------
 
@@ -66,14 +68,19 @@
     util.feedCache.push({ feed: feed, message: message });
   };
 
-  setInterval(() => {
+  setInterval(async() => {
     if (!cache.discordReady) return;
     if (util.feedCache.length < 1) return;
 
     let item = util.feedCache.shift();
 
     if (database.get("feeds")[item.feed]) {
-      discord.channels.get(database.get("feeds")[item.feed]).send(item.message);
+      if (typeof item.message === "string") {
+        cache.feedLastMessages[item.feed] = await discord.channels.get(database.get("feeds")[item.feed]).send(item.message);
+      }
+      else {
+        cache.feedLastMessages[item.feed] = await discord.channels.get(database.get("feeds")[item.feed]).send("", { embed: item.message });
+      }
     }
   }, 1000);
 
@@ -215,6 +222,7 @@
   };
 
   util.personaStates = ["Offline", "Online", "Busy", "Away", "Snooze", "Looking to Trade", "Looking to Play"];
+  util.personaOrbs = ["⚫", "🔵", "🔴", "⚪", "⚪", "🔵", "🔵"];
 
   util.getFriendList = () => {
     let friendsByState = {};
@@ -400,23 +408,12 @@
           delete offersdb[offers[i]];
         }
         else if (rxn.emoji.name === "✅") {
-          offer.accept(false, async(err, status) => {
-            if (err) {
-              return;
-            }
+          cache.aoffers.push([offer.id, rxn.message]);
 
-            let extraData = "";
-
-            if (status === "pending") extraData = "Check your Mobile Authenticator or e-mail inbox to verify.";
-            else if (status === "escrow") extraData = "This trade offer is in escrow.";
-
-            let embed = new Discord.RichEmbed(rxn.message.embeds[0]);
-            embed.setTitle("✅ Trade offer accepted!");
-            embed.setDescription((extraData.length > 0 ? "**" + extraData + "**\n\n" : "") + embed.description);
-
-            await rxn.message.edit("", { embed: embed });
-            await rxn.message.clearReactions();
-          });
+          if (!cache.webLoggingOn) {
+            steam.webLogOn();
+            cache.webLoggingOn = true;
+          }
 
           delete offersdb[offers[i]];
         }
@@ -444,16 +441,37 @@
     }
   });
 
+  discord.on("error", err => {
+    console.log(err);
+    discord.login(config.discord.token);
+  });
+
   // -----------
 
   steam.on("steamGuard", (domain, callback) => {
     cache.needs2FA = callback;
-    util.sendToFeed("connect", "Please enter your Steam Guard code " + (domain ? "that was sent to your e-mail address at " + domain : "from your Mobile Authenticator") + " by typing ~2fa [code].");
+    discord.user.setActivity("Waiting for 2FA code");
+    util.sendToFeed("connect", { description: "Please enter your Steam Guard code " + (domain ? "that was sent to your e-mail address at " + domain : "from your Mobile Authenticator") + " by typing ~2fa [code]." });
   });
 
-  steam.on("loggedOn", () => {
+  steam.on("loggedOn", async() => {
+    discord.user.setActivity("Logged on to Steam");
+
+    if (cache.feedLastMessages.connect) await cache.feedLastMessages.connect.edit("", { embed: { description: "✅ Logged on!" } });
+
     cache.needs2FA = false;
     cache.steamReady = true;
+
+    setInterval(() => {
+      let chats = database.get("chats", {});
+
+      Object.keys(chats).forEach((i, j) => {
+        setTimeout(() => {
+          let chan = discord.channels.get(chats[i].chan);
+          chan.setTopic(util.personaOrbs[(steam.users[i] && steam.users[i].persona_state) ? steam.users[i].persona_state : 0] + " " + (steam.users[i] ? steam.users[i].player_name : i) + "\nhttps://steamcommunity.com/profiles/" + i);
+        }, 2000 * j);
+      });
+    }, 30000);
 
     tradeoffers = new TradeOffers({
       steam: steam,
@@ -474,7 +492,7 @@
 
       if (data[offer.id]) return;
 
-      cache.offers.push(offer);
+      cache.poffers.push(offer);
 
       // force this every time so that we get a fresh session (unless we're already logging on)
       // apps like ASF like to get sessions randomly and screw us up
@@ -504,10 +522,10 @@
 
       let data = database.get("offerData", {});
 
-      while (cache.offers.length > 0) {
+      while (cache.poffers.length > 0) {
         // we shouldn't have more than a couple of offers at a time, so this should work
         // TODO: make this less garbaggio
-        let offer = cache.offers.shift();
+        let offer = cache.poffers.shift();
 
         offer.getUserDetails(async(err, me, them) => {
           if (err) {
@@ -532,7 +550,7 @@
           let msg = await discord.channels.get(database.get("offers")).send("", {
             embed: {
               title: them.personaName + " offered you a trade:",
-              url: "https://steamcommunity.com/tradeoffers/" + offer.id,
+              url: "https://steamcommunity.com/tradeoffer/" + offer.id,
               description: (escrowString.length > 0 ? escrowString + "\n\n" : "") + (offer.message.length > 0 ? offer.message : ""),
               fields: [{
                   "name": them.personaName + " offered:",
@@ -555,6 +573,30 @@
           msg.react("❌");
 
           database.set("offerData", data);
+        });
+      }
+
+      while (cache.aoffers.length > 0) {
+        let aoffer = cache.aoffers.shift();
+
+        tradeoffers.getOffer(aoffer[0], async(err, offer) => {
+          if (err) return console.log(err);
+
+          offer.accept(false, async(err, status) => {
+            if (err) return console.log(err);
+
+            let extraData = "";
+
+            if (status === "pending") extraData = "Check your Mobile Authenticator or e-mail inbox to verify.";
+            else if (status === "escrow") extraData = "This trade offer is in escrow.";
+
+            let embed = new Discord.RichEmbed(aoffer[1].embeds[0]);
+            embed.setTitle("✅ Trade offer accepted!");
+            embed.setDescription((extraData.length > 0 ? "**" + extraData + "**\n\n" : "") + embed.description);
+
+            await aoffer[1].edit("", { embed: embed });
+            await aoffer[1].clearReactions();
+          });
         });
       }
     });
@@ -601,7 +643,15 @@
 
     if (status === "") return;
 
-    util.sendToFeed("relationship", (steam.users[steamid] ? (steam.users[steamid].player_name) : steamid) + " " + status + " you.");
+    let name = steamid;
+    let avatar = "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg";
+
+    if (steam.users[steamid]) {
+      name = steam.users[steamid].player_name;
+      avatar = steam.user[steamid].avatarfull;
+    }
+
+    util.sendToFeed("relationship", { title: name + " " + status + " you.", thumbnail: avatar });
   });
 
   // -----------
