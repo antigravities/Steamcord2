@@ -19,3 +19,6 @@ If you have 2FA enabled on your account, type `~feed connect` in one of the chan
 
 ## License
 https://www.gnu.org/licenses/gpl-3.0
+
+### Icons
+Steamcord2 uses the [Silk icon set](http://www.famfamfam.com/lab/icons/silk/) for icons, licensed under the [CC-BY 2.5](http://creativecommons.org/licenses/by/2.5/) license.

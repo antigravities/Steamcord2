@@ -27,7 +27,6 @@
 
   const discord = new Discord.Client();
   const steam = new Steam({ promptSteamGuardCode: false });
-  let tradeoffers = null;
 
   const Commands = require("./commands.js");
 
@@ -122,6 +121,8 @@
         hook: new Discord.WebhookClient(chats[steamid].hook.id, chats[steamid].hook.token)
       };
     }
+
+    steamid = steamid.toString();
 
     let chan = await cache.mGuild.createChannel(steamid);
     let hook = await chan.createWebhook("Steamcord");
@@ -223,6 +224,7 @@
 
   util.personaStates = ["Offline", "Online", "Busy", "Away", "Snooze", "Looking to Trade", "Looking to Play"];
   util.personaOrbs = ["⚫", "🔵", "🔴", "⚪", "⚪", "🔵", "🔵"];
+  util.relationshipIcons = ["x", "x", "user_add", "heart", "", "x", "", "user_add"];
 
   util.getFriendList = () => {
     let friendsByState = {};
@@ -266,6 +268,41 @@
 
     return embed;
   };
+
+  // because apparently we can get a web session before a client session?
+  // I don't know anymore
+  util.makeOrGetTradeoffers = () => {
+    if (!cache.tradeoffers) {
+      cache.tradeoffers = new TradeOffers({
+        steam: steam,
+        domain: "steamcord.cutie.cafe",
+        language: "en",
+        pollInterval: 15000,
+        pollData: database.get("tpoll", {})
+      });
+    }
+
+    return cache.tradeoffers;
+  };
+
+  util.addIcon = (embed, name) => {
+    if (!embed.author) {
+      embed.author = {};
+
+      if (embed.title) {
+        embed.author.name = embed.title;
+        delete embed.title;
+      }
+
+      if (embed.url) {
+        embed.author.url = embed.url;
+        delete embed.url;
+      }
+    }
+
+    embed.author.icon_url = "https://s3.cutie.cafe/steamcord2/" + name + ".png";
+    return embed;
+  }
 
   // -----------
 
@@ -327,6 +364,8 @@
   }, 5000);
 
   discord.on("message", async message => {
+    let rcv = Date.now();
+
     message.reply = function (message) {
       this.channel.send(message);
     };
@@ -352,7 +391,9 @@
         database: database,
         cache: cache,
         util: util,
-        Steam: Steam
+        Steam: Steam,
+        config: config,
+        rcv: rcv
       };
 
       let response = Commands[command[0]] ? (await Commands[command[0]](pkg)) : (await Commands.unknown(pkg));
@@ -371,7 +412,7 @@
 
   discord.on("channelCreate", channel => {
     if (typeof channel.send === "function") {
-      channel.send("", { embed: { title: "Never tell your password to anyone.", url: "https://support.steampowered.com/kb_article.php?p_faqid=301", description: "Click [here](https://support.steampowered.com/kb_article.php?p_faqid=301) for more account security recommendations.", footer: "Only you can see this" } });
+      channel.send("", { embed: util.addIcon({ title: "Never tell your password to anyone.", url: "https://support.steampowered.com/kb_article.php?p_faqid=301", description: "Click [here](https://support.steampowered.com/kb_article.php?p_faqid=301) for more account security recommendations.", footer: { text: "Only you can see this" } }, "tux") });
     }
   });
 
@@ -391,7 +432,13 @@
     for (let i = 0; i < offers.length; i++) {
       if (offersdb[offers[i]] != rxn.message.id) continue;
 
-      tradeoffers.getOffer(offers[i], async(err, offer) => {
+      if (!cache.tradeoffers) {
+        let embed = rxn.message.embeds[0];
+        embed.title = "Waiting for trade offer session. Try again in a minute.";
+        await rxn.message.edit("", { embed: embed });
+      }
+
+      cache.tradeoffers.getOffer(offers[i], async(err, offer) => {
         if (err) rxn.remove();
 
         if (offer.state !== TradeOffers.ETradeOfferState.Active) {
@@ -451,13 +498,15 @@
   steam.on("steamGuard", (domain, callback) => {
     cache.needs2FA = callback;
     discord.user.setActivity("Waiting for 2FA code");
-    util.sendToFeed("connect", { description: "Please enter your Steam Guard code " + (domain ? "that was sent to your e-mail address at " + domain : "from your Mobile Authenticator") + " by typing ~2fa [code]." });
+    util.sendToFeed("connect", { title: "Waiting for 2FA code", description: "Please enter your Steam Guard code " + (domain ? "that was sent to your e-mail address at " + domain : "from your Mobile Authenticator") + " by typing ~2fa [code]." });
   });
 
   steam.on("loggedOn", async() => {
     discord.user.setActivity("Logged on to Steam");
 
-    if (cache.feedLastMessages.connect) await cache.feedLastMessages.connect.edit("", { embed: { description: "✅ Logged on!" } });
+    let tradeoffers = util.makeOrGetTradeoffers();
+
+    if (cache.feedLastMessages.connect) await cache.feedLastMessages.connect.edit("", { embed: { title: "2FA code accepted", description: "✅ Logged on!" } });
 
     cache.needs2FA = false;
     cache.steamReady = true;
@@ -472,14 +521,6 @@
         }, 2000 * j);
       });
     }, 30000);
-
-    tradeoffers = new TradeOffers({
-      steam: steam,
-      domain: "steamcord.cutie.cafe",
-      language: "en",
-      pollInterval: 15000,
-      pollData: database.get("tpoll", {})
-    });
 
     tradeoffers.on("pollData", data => {
       database.set("tpoll", data);
@@ -515,6 +556,8 @@
   });
 
   steam.on("webSession", (sid, cookies) => {
+    let tradeoffers = util.makeOrGetTradeoffers();
+
     tradeoffers.setCookies(cookies, err => {
       if (err) console.log("error getting api key");
 
@@ -625,6 +668,10 @@
     }
   });
 
+  steam.on("error", error => {
+    util.sendToFeed("connect", { title: "Steam error", description: error.toString().substring(0, 512) + "\n\nAttempt to log on again by typing ~logon." });
+  });
+
   steam.on("newItems", count => util.updateNotificationMessages("items", count));
   steam.on("newComments", count => util.updateNotificationMessages("comments", count));
   steam.on("communityMessages", count => util.updateNotificationMessages("community", count));
@@ -634,24 +681,18 @@
   steam.on("friendRelationship", (steamid, relationship) => {
     if (relationship === Steam.EFriendRelationship.RequestInitiator) return; // the user knows they added someone
 
-    let status;
+    let action = "";
 
-    if (relationship === Steam.EFriendRelationship.None) status = "removed";
-    else if (relationship === Steam.EFriendRelationship.Blocked) status = "blocked";
-    else if (relationship === Steam.EFriendRelationship.Friend || relationship === Steam.EFriendRelationship.RequestRecipient) status = "added";
-    else status = "(unknown, " + relationship + ")";
+    if (relationship === Steam.EFriendRelationship.None) action = "{{name}} removed you.";
+    else if (relationship === Steam.EFriendRelationship.Blocked) action = "You blocked {{name}}.";
+    else if (relationship === Steam.EFriendRelationship.RequestRecipient) action = "{{name}} sent a friend invite.";
+    else if (relationship === Steam.EFriendRelationship.Friend) action = "You are now friends with {{name}}.";
+    else action = "{{name}} " + Steam.EFriendRelationship[relationship] + " you.";
 
-    if (status === "") return;
+    let name = steam.users[steamid] && steam.users[steamid].player_name ? steam.users[steamid].player_name : steamid.toString();
+    let avatar = steam.users[steamid] && steam.users[steamid].avatar_url_full ? steam.users[steamid].avatar_url_full : "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg";
 
-    let name = steamid;
-    let avatar = "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg";
-
-    if (steam.users[steamid]) {
-      name = steam.users[steamid].player_name;
-      avatar = steam.user[steamid].avatarfull;
-    }
-
-    util.sendToFeed("relationship", { title: name + " " + status + " you.", thumbnail: avatar });
+    util.sendToFeed("relationship", util.addIcon({ title: action.replace("{{name}}", name), description: "[Profile](https://steamcommunity.com/profile/" + steamid + ")", thumbnail: { url: avatar }, footer: { text: steamid.toString() } }, util.relationshipIcons[relationship]));
   });
 
   // -----------

@@ -93,3 +93,18 @@ module.exports.offers = pkg => {
     return "Offer notifications will be sent to <#" + pkg.message.channel.id + ">.";
   }
 };
+
+module.exports.logon = pkg => {
+  try {
+    pkg.steam.logOn(pkg.config.steam);
+  }
+  catch (e) {
+    return "Error: " + e;
+  }
+  return "Logging on...";
+}
+
+module.exports.ping = async pkg => {
+  let msg = await pkg.message.channel.send("", { embed: { title: "Pong! 🏓" } });
+  msg.edit("", { embed: { title: "Pong! 🏓", description: "Message received and responded to in " + (Date.now() - pkg.rcv) + "ms." } });
+}
