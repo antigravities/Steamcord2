@@ -1,7 +1,7 @@
-(async() => {
+(async () => {
   const fs = require("fs");
 
-  if( ! fs.existsSync("config.json") ) {
+  if( ! fs.existsSync("config.json") ){
     fs.writeFileSync("config.json", JSON.stringify({
       discord: {
         token: "",
@@ -73,7 +73,7 @@
 
     let item = util.feedCache.shift();
 
-    if( database.get("feeds")[item.feed] ){
+    if( database.get("feeds", {})[item.feed] ){
       if( typeof item.message === "string" ){
         cache.feedLastMessages[item.feed] = await discord.channels.get(database.get("feeds")[item.feed]).send(item.message);
       }
@@ -691,6 +691,5 @@
   });
 
   // -----------
-
   discord.login(config.discord.token);
 })();
