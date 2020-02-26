@@ -5,14 +5,14 @@ module.exports.unknown = () => {
 };
 
 module.exports["2fa"] = pkg => {
-  if (!pkg.cache.needs2FA) return "I don't need a 2FA token right now.";
-  if (pkg.args.length < 2) return "Please specify the 2FA token.";
+  if( ! pkg.cache.needs2FA ) return "I don't need a 2FA token right now.";
+  if( pkg.args.length < 2 ) return "Please specify the 2FA token.";
 
   pkg.cache.needs2FA(pkg.args[1]);
 };
 
 module.exports.create = async pkg => {
-  if (pkg.args.length < 2) return "Please specify a SteamID64 to create a channel for.";
+  if( pkg.args.length < 2 ) return "Please specify a SteamID64 to create a channel for.";
   let chan = await pkg.util.createOrGetFriendChat(pkg.args[1]);
   return "Created channel <#" + chan.chan.id + ">. Rename or reorganize it however you'd like.";
 };
@@ -24,13 +24,13 @@ module.exports.delete = async pkg => {
 
   let link = pkg.util.getSteamIDFromChan(pkg.message.channel);
 
-  if (!link) return "This channel is not linked to a chat.";
+  if( ! link ) return "This channel is not linked to a chat.";
 
-  if (!soft) await pkg.message.channel.delete();
+  if( ! soft ) await pkg.message.channel.delete( );
 
   delete chans[link];
 
-  if (soft) {
+  if( soft ) {
     (await pkg.message.channel.send("This channel has been soft-deleted and is unlinked from Steamcord. Messages sent here will not reach the other party.")).pin();
   }
 
@@ -38,9 +38,9 @@ module.exports.delete = async pkg => {
 };
 
 module.exports.feed = pkg => {
-  if (pkg.args.length < 2) return "Please specify a feed to assign.";
+  if( pkg.args.length < 2 ) return "Please specify a feed to assign.";
 
-  if (!pkg.database.get("feeds", false)) pkg.database.set("feeds", {});
+  if( ! pkg.database.get("feeds", false) ) pkg.database.set("feeds", {});
 
   let cfeeds = pkg.database.get("feeds");
   cfeeds[pkg.args[1]] = pkg.message.channel.id;
@@ -50,9 +50,9 @@ module.exports.feed = pkg => {
 };
 
 module.exports.unfeed = pkg => {
-  if (pkg.args.length < 2) return "Please specify a feed to unassign.";
+  if( pkg.args.length < 2 ) return "Please specify a feed to unassign.";
 
-  if (!pkg.database.get("feeds", false)) pkg.database.set("feeds", {});
+  if( ! pkg.database.get("feeds", false) ) pkg.database.set("feeds", {});
 
   let cfeeds = pkg.database.get("feeds");
   delete cfeeds[pkg.args[1]];
@@ -72,23 +72,21 @@ module.exports.help = pkg => {
 };
 
 module.exports.friends = async pkg => {
-  if (pkg.database.get("friendchan", false)) {
+  if( pkg.database.get("friendchan", false) ){
     pkg.database.set("friendchan", false);
     pkg.database.set("friendmsg", false);
     return "Disabled friend list.";
-  }
-  else {
+  } else {
     pkg.database.set("friendchan", pkg.message.channel.id);
     pkg.database.set("friendmsg", (await pkg.message.channel.send("", { embed: { description: "Please wait..." } })).id);
   }
 };
 
 module.exports.offers = pkg => {
-  if (pkg.database.get("offers", false)) {
+  if( pkg.database.get("offers", false) ){
     pkg.database.set("offers", false);
     return "Disabled offer notifications.";
-  }
-  else {
+  } else {
     pkg.database.set("offers", pkg.message.channel.id);
     return "Offer notifications will be sent to <#" + pkg.message.channel.id + ">.";
   }
@@ -97,8 +95,7 @@ module.exports.offers = pkg => {
 module.exports.logon = pkg => {
   try {
     pkg.steam.logOn(pkg.config.steam);
-  }
-  catch (e) {
+  } catch (e) {
     return "Error: " + e;
   }
   return "Logging on...";

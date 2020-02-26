@@ -1,7 +1,7 @@
 (async() => {
   const fs = require("fs");
 
-  if (!fs.existsSync("config.json")) {
+  if( ! fs.existsSync("config.json") ) {
     fs.writeFileSync("config.json", JSON.stringify({
       discord: {
         token: "",
@@ -46,7 +46,7 @@
 
   // -----------
 
-  if (!fs.existsSync("database.json")) fs.writeFileSync("database.json", "{}");
+  if( ! fs.existsSync("database.json") ) fs.writeFileSync("database.json", "{}");
 
   let database = JSON.parse(fs.readFileSync("database.json"));
 
@@ -67,14 +67,14 @@
     util.feedCache.push({ feed: feed, message: message });
   };
 
-  setInterval(async() => {
-    if (!cache.discordReady) return;
-    if (util.feedCache.length < 1) return;
+  setInterval(async () => {
+    if( ! cache.discordReady ) return;
+    if( util.feedCache.length < 1 ) return;
 
     let item = util.feedCache.shift();
 
-    if (database.get("feeds")[item.feed]) {
-      if (typeof item.message === "string") {
+    if( database.get("feeds")[item.feed] ){
+      if( typeof item.message === "string" ){
         cache.feedLastMessages[item.feed] = await discord.channels.get(database.get("feeds")[item.feed]).send(item.message);
       }
       else {
@@ -85,10 +85,10 @@
 
   util.waitUntilDiscordBack = () => {
     return new Promise(resolve => {
-      if (cache.discordReady && cache.mGuild.available) return resolve();
+      if( cache.discordReady && cache.mGuild.available ) return resolve( );
 
       let int = setInterval(() => {
-        if (!cache.discordReady || !cache.mGuild.available) return;
+        if( ! cache.discordReady || ! cache.mGuild.available ) return;
 
         clearInterval(int);
         resolve();
@@ -101,7 +101,7 @@
   util.hasFriendChat = async steamid => {
     await util.waitUntilDiscordBack();
 
-    if (!database.get("chats", false)) database.set("chats", {});
+    if( ! database.get("chats", false) ) database.set("chats", {});
 
     let chats = database.get("chats");
 
@@ -111,11 +111,11 @@
   util.createOrGetFriendChat = async steamid => {
     await util.waitUntilDiscordBack();
 
-    if (!database.get("chats", false)) database.set("chats", {});
+    if( ! database.get("chats", false) ) database.set("chats", {});
 
     let chats = database.get("chats");
 
-    if (chats[steamid]) {
+    if( chats[steamid] ){
       return {
         chan: discord.channels.get(chats[steamid].chan),
         hook: new Discord.WebhookClient(chats[steamid].hook.id, chats[steamid].hook.token)
@@ -141,31 +141,31 @@
     let chats = database.get("chats", {});
     let keys = Object.keys(chats);
 
-    for (let i = 0; i < keys.length; i++) {
-      if (chats[keys[i]].chan === channel.id) return keys[i];
+    for(let i = 0; i < keys.length; i++){
+      if( chats[keys[i]].chan === channel.id ) return keys[i];
     }
 
     return false;
   };
 
-  util.sendFromFriend = async(steamid, message) => {
+  util.sendFromFriend = async (steamid, message) => {
     let chan = await util.createOrGetFriendChat(steamid);
-    if (cache.typing[steamid]) {
+    if( cache.typing[steamid] ){
       clearTimeout(cache.typing[steamid]);
       chan.chan.stopTyping();
     }
 
     let emoticons = message.match(new RegExp("ː[A-Za-z0-9]*ː", "g"));
 
-    if (emoticons && emoticons.length > 0) {
-      for (let i = 0; i < emoticons.length; i++) {
+    if( emoticons && emoticons.length > 0 ){
+      for(let i = 0; i < emoticons.length; i++) {
         let name = emoticons[i].slice(1, -1);
 
         let emoji = cache.mGuild.emojis.find(x => x.name === name);
 
-        if (!emoji) {
-          if (cache.mGuild.emojis.array().length < 50) {
-            for (let i = 0; i < emoticons.length; i++) {
+        if( ! emoji ){
+          if( cache.mGuild.emojis.array().length < 50 ){
+            for(let i = 0; i < emoticons.length; i++) {
               emoji = await cache.mGuild.createEmoji("https://steamcommunity-a.akamaihd.net/economy/emoticonlarge/" + name, name);
 
               message = message.replace(new RegExp("ː" + name + "ː", "g"), emoji.toString());
@@ -190,14 +190,14 @@
     offline: 0
   };
 
-  util.updateNotificationMessages = async(type, count) => {
-    if (!database.get("notification", false)) return;
+  util.updateNotificationMessages = async (type, count) => {
+    if( ! database.get("notification", false) ) return;
 
     let message;
     let mid = database.get("notification_message", false);
     let chan = await discord.channels.get(database.get("notification"));
 
-    if (!mid) {
+    if( ! mid ) {
       message = await chan.send("", { embed: { title: "Steam Notifications", description: "Please wait..." } });
       database.set("notification_message", message.id);
     }
@@ -222,9 +222,9 @@
     });
   };
 
-  util.personaStates = ["Offline", "Online", "Busy", "Away", "Snooze", "Looking to Trade", "Looking to Play"];
-  util.personaOrbs = ["⚫", "🔵", "🔴", "⚪", "⚪", "🔵", "🔵"];
-  util.relationshipIcons = ["x", "x", "user_add", "heart", "", "x", "", "user_add"];
+  util.personaStates = [ "Offline", "Online", "Busy", "Away", "Snooze", "Looking to Trade", "Looking to Play" ];
+  util.personaOrbs = [ "⚫", "🔵", "🔴", "⚪", "⚪", "🔵", "🔵" ];
+  util.relationshipIcons = [ "x", "x", "user_add", "heart", "", "x", "", "user_add" ];
 
   util.getFriendList = () => {
     let friendsByState = {};
@@ -232,7 +232,7 @@
     util.personaStates.forEach((i, j) => friendsByState[j] = []);
 
     Object.keys(steam.myFriends).forEach(i => {
-      if (steam.myFriends[i] !== Steam.EFriendRelationship.Friend) return;
+      if( steam.myFriends[i] !== Steam.EFriendRelationship.Friend ) return;
       friendsByState[(steam.users[i] && steam.users[i].persona_state) ? steam.users[i].persona_state : 0].push((steam.users[i] ? steam.users[i].player_name.replace(new RegExp("_", "g"), "\\_") : i));
     });
 
@@ -245,7 +245,7 @@
     states.forEach(i => {
       let final = friendsByState[i].join(", ");
 
-      if (final.length < 1024) final = [final];
+      if( final.length < 1024 ) final = [ final ];
       else {
         let comb = [];
 
@@ -272,7 +272,7 @@
   // because apparently we can get a web session before a client session?
   // I don't know anymore
   util.makeOrGetTradeoffers = () => {
-    if (!cache.tradeoffers) {
+    if( ! cache.tradeoffers ){
       cache.tradeoffers = new TradeOffers({
         steam: steam,
         domain: "steamcord.cutie.cafe",
@@ -286,15 +286,15 @@
   };
 
   util.addIcon = (embed, name) => {
-    if (!embed.author) {
+    if( ! embed.author ){
       embed.author = {};
 
-      if (embed.title) {
+      if( embed.title ){
         embed.author.name = embed.title;
         delete embed.title;
       }
 
-      if (embed.url) {
+      if( embed.url ){
         embed.author.url = embed.url;
         delete embed.url;
       }
@@ -306,19 +306,19 @@
 
   // -----------
 
-  discord.on("ready", async() => {
+  discord.on("ready", async () => {
     cache.discordReady = true;
 
     cache.mGuild = discord.guilds.get(config.discord.guild);
 
     util.sendToFeed("debug", "Connected to Discord.");
 
-    if (!cache.loggedOn) {
+    if( ! cache.loggedOn ){
       steam.logOn(config.steam);
     }
 
 
-    if (database.get("offers", false)) {
+    if( database.get("offers", false) ){
       let offers = Object.values(database.get("offerData", {}));
 
       // so that we get reactions
@@ -328,14 +328,14 @@
     }
   });
 
-  setInterval(async() => {
-    if (!cache.discordReady) return;
+  setInterval(async () => {
+    if( ! cache.discordReady ) return;
     util.sendToFeed("debug", "polling status");
 
     let master = await cache.mGuild.members.get(config.discord.master);
 
-    if (master.presence) {
-      if (master.presence.game) {
+    if( master.presence ){
+      if( master.presence.game ){
         steam.gamesPlayed(master.presence.game.name);
       }
       else {
@@ -344,21 +344,21 @@
 
       let nick = master.displayName;
 
-      switch (master.presence.status) {
-      case "dnd":
-        steam.setPersona(Steam.EPersonaState.Busy, nick);
-        break;
-      case "online":
-        steam.setPersona(Steam.EPersonaState.Online, nick);
-        break;
-      case "idle":
-        steam.setPersona(Steam.EPersonaState.Away, nick);
-        break;
-      case "offline":
-        steam.setPersona(Steam.EPersonaState.Snooze, nick);
-        break;
-      default:
-        steam.setPersona(Steam.EPersonaState.Online, nick);
+      switch(master.presence.status){
+        case "dnd":
+          steam.setPersona(Steam.EPersonaState.Busy, nick);
+          break;
+        case "online":
+          steam.setPersona(Steam.EPersonaState.Online, nick);
+          break;
+        case "idle":
+          steam.setPersona(Steam.EPersonaState.Away, nick);
+          break;
+        case "offline":
+          steam.setPersona(Steam.EPersonaState.Snooze, nick);
+          break;
+        default:
+          steam.setPersona(Steam.EPersonaState.Online, nick);
       }
     }
   }, 5000);
@@ -370,17 +370,17 @@
       this.channel.send(message);
     };
 
-    if (message.author.bot) return;
+    if( message.author.bot ) return;
 
-    if (message.guild === null) {
+    if( message.guild === null ){
       return message.reply("I can only be communicated with in my assigned guild.");
     }
 
-    if (message.author.id != config.discord.master) {
+    if( message.author.id != config.discord.master ){
       return message.reply("Only my master can communicate with me.");
     }
 
-    if (message.content[0] === "~") {
+    if( message.content[0] === "~" ){
       let command = message.content.slice(1).split(" ");
 
       let pkg = {
@@ -398,12 +398,11 @@
 
       let response = Commands[command[0]] ? (await Commands[command[0]](pkg)) : (await Commands.unknown(pkg));
 
-      if (typeof response === 'string') message.reply(response);
-    }
-    else {
+      if( typeof response === 'string' ) message.reply(response);
+    } else {
       let steamid = util.getSteamIDFromChan(message.channel);
 
-      if (steamid === false) return;
+      if( steamid === false ) return;
       else {
         steam.chatMessage(steamid, message.content.replace(/\<\:([A-Za-z0-9]*)\:\d*\>/g, ":$1:"));
       }
@@ -411,37 +410,37 @@
   });
 
   discord.on("channelCreate", channel => {
-    if (typeof channel.send === "function") {
+    if( typeof channel.send === "function" ) {
       channel.send("", { embed: util.addIcon({ title: "Never tell your password to anyone.", url: "https://support.steampowered.com/kb_article.php?p_faqid=301", description: "Click [here](https://support.steampowered.com/kb_article.php?p_faqid=301) for more account security recommendations.", footer: { text: "Only you can see this" } }, "tux") });
     }
   });
 
   discord.on("typingStart", (channel, user) => {
-    if (user.id !== config.discord.master) return;
+    if( user.id !== config.discord.master ) return;
 
     let steamid = util.getSteamIDFromChan(channel);
-    if (steamid) steam.chatTyping(steamid);
+    if( steamid ) steam.chatTyping(steamid);
   });
 
-  discord.on("messageReactionAdd", async(rxn, user) => {
-    if (user.bot) return;
+  discord.on("messageReactionAdd", async (rxn, user) => {
+    if( user.bot ) return;
 
     let offersdb = database.get("offerData", {});
     let offers = Object.keys(offersdb);
 
-    for (let i = 0; i < offers.length; i++) {
-      if (offersdb[offers[i]] != rxn.message.id) continue;
+    for (let i = 0; i < offers.length; i++){
+      if( offersdb[offers[i]] != rxn.message.id ) continue;
 
-      if (!cache.tradeoffers) {
+      if( ! cache.tradeoffers ){
         let embed = rxn.message.embeds[0];
         embed.title = "Waiting for trade offer session. Try again in a minute.";
         await rxn.message.edit("", { embed: embed });
       }
 
-      cache.tradeoffers.getOffer(offers[i], async(err, offer) => {
-        if (err) rxn.remove();
+      cache.tradeoffers.getOffer(offers[i], async (err, offer) => {
+        if( err ) rxn.remove();
 
-        if (offer.state !== TradeOffers.ETradeOfferState.Active) {
+        if( offer.state !== TradeOffers.ETradeOfferState.Active ) {
           //await rxn.remove();
           await rxn.message.edit("", {
             embed: {
@@ -453,22 +452,18 @@
           await rxn.message.clearReactions();
 
           delete offersdb[offers[i]];
-        }
-        else if (rxn.emoji.name === "✅") {
+        } else if( rxn.emoji.name === "✅" ){
           cache.aoffers.push([offer.id, rxn.message]);
 
-          if (!cache.webLoggingOn) {
+          if( ! cache.webLoggingOn ){
             steam.webLogOn();
             cache.webLoggingOn = true;
           }
 
           delete offersdb[offers[i]];
-        }
-        else if (rxn.emoji.name === "❌") {
-          offer.decline(async(err) => {
-            if (err) {
-              return;
-            }
+        } else if( rxn.emoji.name === "❌" ){
+          offer.decline(async err => {
+            if( err ) return;
 
             let embed = new Discord.RichEmbed(rxn.message.embeds[0]);
             embed.setTitle("❌ Trade offer declined!");
@@ -506,7 +501,7 @@
 
     let tradeoffers = util.makeOrGetTradeoffers();
 
-    if (cache.feedLastMessages.connect) await cache.feedLastMessages.connect.edit("", { embed: { title: "2FA code accepted", description: "✅ Logged on!" } });
+    if( cache.feedLastMessages.connect ) await cache.feedLastMessages.connect.edit("", { embed: { title: "2FA code accepted", description: "✅ Logged on!" } });
 
     cache.needs2FA = false;
     cache.steamReady = true;
@@ -527,24 +522,24 @@
     });
 
     tradeoffers.on("newOffer", async offer => {
-      if (!database.get("offers", false) || offer.isGlitched()) return;
+      if( ! database.get("offers", false) || offer.isGlitched() ) return;
 
       let data = database.get("offerData", {});
 
-      if (data[offer.id]) return;
+      if( data[offer.id] ) return;
 
       cache.poffers.push(offer);
 
       // force this every time so that we get a fresh session (unless we're already logging on)
       // apps like ASF like to get sessions randomly and screw us up
-      if (!cache.webLoggingOn) {
+      if( ! cache.webLoggingOn ){
         steam.webLogOn();
         cache.webLoggingOn = true;
       }
     });
 
-    setInterval(async() => {
-      if (!database.get("friendchan", false)) return;
+    setInterval(async () => {
+      if( ! database.get("friendchan", false) ) return;
 
       let message = (await discord.channels.get(database.get("friendchan")).fetchMessages({ around: database.get("friendmsg"), limit: 1 })).first();
 
@@ -559,7 +554,7 @@
     let tradeoffers = util.makeOrGetTradeoffers();
 
     tradeoffers.setCookies(cookies, err => {
-      if (err) console.log("error getting api key");
+      if( err ) return console.log("error getting api key");
 
       cache.webLoggingOn = false;
 
@@ -571,7 +566,7 @@
         let offer = cache.poffers.shift();
 
         offer.getUserDetails(async(err, me, them) => {
-          if (err) {
+          if( err ){
             them = {
               personaName: offer.partner.toString(),
               avatarFull: "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg",
@@ -581,8 +576,8 @@
 
           let escrowString = "";
 
-          if (them.escrowDays === -1) escrowString = "Unable to obtain escrow information";
-          else if (them.escrowDays > 0) escrowString = "This trade will be held for " + them.escrowDays + " days";
+          if( them.escrowDays === -1 ) escrowString = "Unable to obtain escrow information";
+          else if( them.escrowDays > 0 ) escrowString = "This trade will be held for " + them.escrowDays + " days";
 
           let strs = [offer.itemsToGive, offer.itemsToReceive].map(i => {
             return i.map(j => {
@@ -619,19 +614,19 @@
         });
       }
 
-      while (cache.aoffers.length > 0) {
+      while(cache.aoffers.length > 0){
         let aoffer = cache.aoffers.shift();
 
-        tradeoffers.getOffer(aoffer[0], async(err, offer) => {
-          if (err) return console.log(err);
+        tradeoffers.getOffer(aoffer[0], async (err, offer) => {
+          if( err ) return console.log(err);
 
           offer.accept(false, async(err, status) => {
-            if (err) return console.log(err);
+            if( err ) return console.log(err);
 
             let extraData = "";
 
-            if (status === "pending") extraData = "Check your Mobile Authenticator or e-mail inbox to verify.";
-            else if (status === "escrow") extraData = "This trade offer is in escrow.";
+            if( status === "pending" ) extraData = "Check your Mobile Authenticator or e-mail inbox to verify.";
+            else if( status === "escrow" ) extraData = "This trade offer is in escrow.";
 
             let embed = new Discord.RichEmbed(aoffer[1].embeds[0]);
             embed.setTitle("✅ Trade offer accepted!");
@@ -656,7 +651,7 @@
   });
 
   steam.on("friendTyping", async steamid => {
-    if (util.hasFriendChat(steamid) && !cache.typing[steamid]) {
+    if( util.hasFriendChat(steamid) && !cache.typing[steamid] ) {
 
       let chan = (await util.createOrGetFriendChat(steamid));
 
@@ -679,14 +674,14 @@
   steam.on("tradeOffers", count => util.updateNotificationMessages("offers", count));
 
   steam.on("friendRelationship", (steamid, relationship) => {
-    if (relationship === Steam.EFriendRelationship.RequestInitiator) return; // the user knows they added someone
+    if( relationship === Steam.EFriendRelationship.RequestInitiator ) return; // the user knows they added someone
 
     let action = "";
 
-    if (relationship === Steam.EFriendRelationship.None) action = "{{name}} removed you.";
-    else if (relationship === Steam.EFriendRelationship.Blocked) action = "You blocked {{name}}.";
-    else if (relationship === Steam.EFriendRelationship.RequestRecipient) action = "{{name}} sent a friend invite.";
-    else if (relationship === Steam.EFriendRelationship.Friend) action = "You are now friends with {{name}}.";
+    if( relationship === Steam.EFriendRelationship.None ) action = "{{name}} removed you.";
+    else if( relationship === Steam.EFriendRelationship.Blocked ) action = "You blocked {{name}}.";
+    else if( relationship === Steam.EFriendRelationship.RequestRecipient ) action = "{{name}} sent a friend invite.";
+    else if( relationship === Steam.EFriendRelationship.Friend ) action = "You are now friends with {{name}}.";
     else action = "{{name}} " + Steam.EFriendRelationship[relationship] + " you.";
 
     let name = steam.users[steamid] && steam.users[steamid].player_name ? steam.users[steamid].player_name : steamid.toString();
