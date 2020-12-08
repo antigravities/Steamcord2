@@ -24,6 +24,8 @@
   const Steam = require("steam-user");
   const Discord = require("discord.js");
   const TradeOffers = require("steam-tradeoffer-manager");
+  const Community = require("steamcommunity");
+  const Cheerio = require("cheerio");
 
   const discord = new Discord.Client();
   const steam = new Steam({ promptSteamGuardCode: false });
@@ -43,6 +45,7 @@
   cache.poffers = [];
   cache.aoffers = [];
   cache.feedLastMessages = {};
+  cache.cookies = null;
 
   // -----------
 
@@ -293,6 +296,14 @@
     return cache.tradeoffers;
   };
 
+  util.makeOrGetCommunity = () => {
+    if( ! cache.community ){
+      cache.community = new Community();
+    }
+
+    return cache.community;
+  }
+
   util.addIcon = (embed, name) => {
     if( ! embed.author ){
       embed.author = {};
@@ -310,6 +321,23 @@
 
     embed.author.icon_url = "https://s3.cutie.cafe/steamcord2/" + name + ".png";
     return embed;
+  }
+
+  // returns a promise that resolves when cache.webLoggingOn is false
+  util.awaitWebLogon = () => {
+    if( ! cache.webLoggingOn ){
+      steam.webLogOn();
+      cache.webLoggingOn = true;
+    }
+
+    return new Promise(resolve => {
+      let inter = setInterval(() => {
+        if( ! cache.webLoggingOn ){
+          clearInterval(inter);
+          resolve();
+        }
+      }, 1000);
+    });
   }
 
   // -----------
@@ -338,7 +366,6 @@
 
   setInterval(async () => {
     if( ! cache.discordReady ) return;
-    util.sendToFeed("debug", "polling status");
 
     let master = await cache.mGuild.member(config.discord.master);
 
@@ -531,6 +558,123 @@
       });
     }, 30000);
 
+    setInterval(async () => {
+      await util.awaitWebLogon();
+      let community = util.makeOrGetCommunity();
+
+      let lastBlotter = database.get("lastBlotter", 0);
+      if( lastBlotter == 0 ){
+        util.sendToFeed("debug", "skipping first blotter");
+        database.set("lastBlotter", Math.round(Date.now()/1000));
+        return;
+      }
+
+      let lastBlotterItem = database.get("lastBlotterItem", "");
+      let nLastBlotterItem = lastBlotterItem;
+
+      util.sendToFeed("debug", "starting blotter fetch. last item: " + lastBlotterItem.substring(0, 255));
+
+      community.httpRequestGet("https://steamcommunity.com/id/antigravities39/ajaxgetusernews/?start=" + Math.floor(Date.now()/1000), {}, (err, res) => {
+        if( err != null ){
+          console.log(err);
+          return;
+        }
+
+        let response = JSON.parse(res.body);
+
+        if( ! response.success ){
+          util.sendToFeed("debug", "blotter response unsuccessful: " + JSON.stringify(response));
+          return;
+        }
+
+        if( response.timestart == lastBlotter ){
+          util.sendToFeed("debug", "nothing new on blotter since " + lastBlotter);
+          return;
+        }
+
+        let $ = Cheerio.load(response.blotter_html);
+        let stop = false;
+        let isFirst = true;
+
+        $(".blotter_block").each((_, e) => {
+          if( stop ) return;
+
+          let headline = $(e).find(".blotter_author_block").text().trim().replace(/\s{2,}/g, " ");
+          let avatar, name;
+          let isSingleLineBlotter = false;
+
+          if( headline.length == 0 ){
+            headline = $(e).find(".blotter_group_announcement_header").text().trim().replace(/\s{2,}/g, " ");
+            avatar = $(e).find(".blotter_group_announcement_header").first().find("img").attr("src");
+            name = $(e).find(".blotter_group_announcement_header_text").first().find("a").first().text().trim();
+          } else {
+            avatar = $(e).find(".blotter_avatar_holder").find(".playerAvatar > img:last-child").attr("src"); // use last-child to skip avatar frames
+            name = $(e).find(".blotter_author_block").find("a[data-miniprofile]").text();
+
+            // work around status updates missing miniprofile
+            if( name.length == 0 ){
+              name = $(e).find(".blotter_author_block > div:not(.blotter_avatar_holder)").first().text().trim();
+            }
+          }
+
+          if( headline.length == 0 ){
+            // this is very likely a single line blotter item.
+            // we cannot support these right now due to how we track regular blotter items.
+            util.sendToFeed("debug", "found unrecognized blotter item " + $(e).text().trim().replace(/\s{2,}/g, " ").substring(0, 512));
+            return;
+          }
+
+          // let's try to get SOMETHING out of this entry
+          let description;
+          
+          if( ! isSingleLineBlotter ){
+            description =  $(e).find("[class$='_content']:not([class^='comment'])").text().trim().replace(/\s{2,}/g, " ");
+
+            if( description.length == 0 ){
+              // profile statuses?
+              description = $(e).find("[class$='_text']:not([class^='comment'])").text().trim().replace(/\s{2,}/g, " ");
+  
+              if( description.length == 0 ){
+                // game purchase details, after this I give up
+                description = $(e).find("[class$='_details']:not([class^='comment'])").text().trim().replace(/\s{2,}/g, " ");
+              }
+            }
+          }
+
+          description = description.replace("Potential spoilers. Hover to reveal image.", ""); // lol hack
+
+          description = description.substring(0, 512);
+          headline = headline.substring(0, 512);
+
+          let feedSendObject = {
+            title: headline,
+            description,
+            author: {
+              name,
+              icon_url: avatar
+            }
+          }
+
+          // STOP!! if we find something we've sent before
+          if( JSON.stringify(feedSendObject) == lastBlotterItem ){
+            util.sendToFeed("debug", "found identical blotter item, stopping!");
+            stop = true;
+            return;
+          }
+
+          if( isFirst ){
+            nLastBlotterItem = JSON.stringify(feedSendObject);
+            isFirst = false;
+          }
+
+          util.sendToFeed("activity", feedSendObject);
+        });
+
+        database.set("lastBlotterItem", nLastBlotterItem);
+      });
+
+    }, 15000);
+
     tradeoffers.on("pollData", data => {
       database.set("tpoll", data);
     });
@@ -559,13 +703,16 @@
 
       message.edit("", { embed: util.getFriendList() });
 
-    }, 15000);
+    }, 120000);
 
     util.sendToFeed("debug", "Connected to Steam.");
   });
 
   steam.on("webSession", (sid, cookies) => {
+    cache.cookies = cookies;
+
     let tradeoffers = util.makeOrGetTradeoffers();
+    let community = util.makeOrGetCommunity();
 
     tradeoffers.setCookies(cookies, err => {
       if( err ) return console.log("error getting api key");
@@ -652,6 +799,8 @@
         });
       }
     });
+
+    community.setCookies(cookies);
   });
 
   steam.on("disconnected", () => {
