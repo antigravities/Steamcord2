@@ -75,17 +75,17 @@
 
     if( database.get("feeds", {})[item.feed] ){
       if( typeof item.message === "string" ){
-        cache.feedLastMessages[item.feed] = (await discord.channels.fetch(database.get("feeds")[item.feed])).send(item.message);
+        cache.feedLastMessages[item.feed] = await (await discord.channels.fetch(database.get("feeds")[item.feed])).send(item.message);
       }
       else {
-        cache.feedLastMessages[item.feed] = (await discord.channels.fetch(database.get("feeds")[item.feed])).send("", { embed: item.message });
+        cache.feedLastMessages[item.feed] = await (await discord.channels.fetch(database.get("feeds")[item.feed])).send("", { embed: item.message });
       }
     }
   }, 1000);
 
   util.waitUntilDiscordBack = () => {
     return new Promise(resolve => {
-      if( cache.discordReady && cache.mGuild.available ) return resolve( );
+      if( cache.discordReady && cache.mGuild.available ) return resolve();
 
       let int = setInterval(() => {
         if( ! cache.discordReady || ! cache.mGuild.available ) return;
@@ -161,15 +161,17 @@
       for(let i = 0; i < emoticons.length; i++) {
         let name = emoticons[i].slice(1, -1);
 
-        let emoji = cache.mGuild.emojis.find(x => x.name === name);
+        let emoji = cache.mGuild.emojis.cache.find(x => x.name === name);
 
         if( ! emoji ){
-          if( cache.mGuild.emojis.array().length < 50 ){
+          if( cache.mGuild.emojis.cache.array().length < 50 ){
             for(let i = 0; i < emoticons.length; i++) {
-              emoji = await cache.mGuild.createEmoji("https://steamcommunity-a.akamaihd.net/economy/emoticonlarge/" + name, name);
+              emoji = await cache.mGuild.emojis.create("https://steamcommunity-a.akamaihd.net/economy/emoticonlarge/" + name, name);
 
               message = message.replace(new RegExp("ː" + name + "ː", "g"), emoji.toString());
             }
+          } else {
+            util.sendToFeed("connect", "I have too many emojis! Delete some so I can add some more.")
           }
         }
         else {
