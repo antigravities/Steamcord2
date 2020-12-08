@@ -227,7 +227,7 @@
     });
   };
 
-  util.personaStates = [ "Offline", "Online", "Busy", "Away", "Snooze", "Looking to Trade", "Looking to Play" ];
+  util.personaStates = [ "Offline", "Online", "_", "Away", "Snooze", "_", "_" ];
   util.personaOrbs = [ "⚫", "🔵", "🔴", "⚪", "⚪", "🔵", "🔵" ];
   util.relationshipIcons = [ "x", "x", "user_add", "heart", "", "x", "", "user_add" ];
 
@@ -264,6 +264,9 @@
       }
 
       final.forEach((j, k) => {
+        // remove old, now unused persona states from the list
+        if( util.personaStates[i] == "_" ) return;
+
         embed.fields.push({
           name: util.personaStates[i] + (k > 0 ? " (continued)" : ""),
           value: j.length === 0 ? "(none)" : j
