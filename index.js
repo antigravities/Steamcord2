@@ -580,10 +580,18 @@
           return;
         }
 
-        let response = JSON.parse(res.body);
+        let response;
 
-        if( ! response.success ){
-          util.sendToFeed("debug", "blotter response unsuccessful: " + JSON.stringify(response));
+        try {
+          response = JSON.parse(res.body);
+
+          if( ! response.success ){
+            util.sendToFeed("debug", "blotter response unsuccessful: " + JSON.stringify(response));
+            return;
+          }
+        } catch(e){
+          console.log(e);
+          util.sendToFeed("debug", "blotter fetch failed: " + e);
           return;
         }
 
