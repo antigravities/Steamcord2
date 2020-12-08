@@ -93,11 +93,14 @@ module.exports.offers = pkg => {
 };
 
 module.exports.logon = pkg => {
-  try {
-    pkg.steam.logOn(pkg.config.steam);
-  } catch (e) {
-    return "Error: " + e;
-  }
+  (async () => {
+    try {
+      await pkg.steam.logOn(pkg.config.steam);
+    } catch (e) {
+      console.log(e);
+      return pkg.util.sendToFeed("connect", { title: "Steam error", description: e.toString().substring(0, 512) + "\n\nAttempt to log on again by typing ~logon." });
+    }
+  });
   return "Logging on...";
 }
 
