@@ -105,3 +105,9 @@ module.exports.ping = async pkg => {
   let msg = await pkg.message.channel.send("", { embed: { title: "Pong! 🏓" } });
   msg.edit("", { embed: { title: "Pong! 🏓", description: "Message received and responded to in " + (Date.now() - pkg.rcv) + "ms." } });
 }
+
+module.exports.add = async pkg => {
+  if( pkg.args.length < 2 ) return "Please specify a friend to add.";
+  pkg.steam.addFriend(pkg.args[1]);
+  return "Sent a friend invite to or accepted a friend invite from <https://steamcommunity.com/profiles/" + pkg.args[1] + ">";
+}

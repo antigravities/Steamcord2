@@ -75,10 +75,10 @@
 
     if( database.get("feeds", {})[item.feed] ){
       if( typeof item.message === "string" ){
-        cache.feedLastMessages[item.feed] = await discord.channels.get(database.get("feeds")[item.feed]).send(item.message);
+        cache.feedLastMessages[item.feed] = (await discord.channels.fetch(database.get("feeds")[item.feed])).send(item.message);
       }
       else {
-        cache.feedLastMessages[item.feed] = await discord.channels.get(database.get("feeds")[item.feed]).send("", { embed: item.message });
+        cache.feedLastMessages[item.feed] = (await discord.channels.fetch(database.get("feeds")[item.feed])).send("", { embed: item.message });
       }
     }
   }, 1000);
@@ -117,14 +117,14 @@
 
     if( chats[steamid] ){
       return {
-        chan: discord.channels.get(chats[steamid].chan),
+        chan: (await discord.channels.fetch(chats[steamid].chan)),
         hook: new Discord.WebhookClient(chats[steamid].hook.id, chats[steamid].hook.token)
       };
     }
 
     steamid = steamid.toString();
 
-    let chan = await cache.mGuild.createChannel(steamid);
+    let chan = await cache.mGuild.channels.create(steamid);
     let hook = await chan.createWebhook("Steamcord");
 
     chats[steamid] = {
@@ -195,14 +195,14 @@
 
     let message;
     let mid = database.get("notification_message", false);
-    let chan = await discord.channels.get(database.get("notification"));
+    let chan = await discord.channels.fetch(database.get("notification"));
 
     if( ! mid ) {
       message = await chan.send("", { embed: { title: "Steam Notifications", description: "Please wait..." } });
       database.set("notification_message", message.id);
     }
     else {
-      message = (await chan.fetchMessages({ around: mid, limit: 1 })).get(mid);
+      message = await chan.messages.fetch(mid)
     }
 
     util.notifications[type] = count;
@@ -309,7 +309,7 @@
   discord.on("ready", async () => {
     cache.discordReady = true;
 
-    cache.mGuild = discord.guilds.get(config.discord.guild);
+    cache.mGuild = await discord.guilds.fetch(config.discord.guild);
 
     util.sendToFeed("debug", "Connected to Discord.");
 
@@ -322,9 +322,9 @@
       let offers = Object.values(database.get("offerData", {}));
 
       // so that we get reactions
-      offers.forEach(i => {
-        discord.channels.get(database.get("offers")).fetchMessages({ around: i, limit: 1 });
-      });
+      for( let i of offers ){
+        (await discord.channels.fetch(database.get("offers"))).fetchMessages({ around: i, limit: 1 });
+      }
     }
   });
 
@@ -332,16 +332,9 @@
     if( ! cache.discordReady ) return;
     util.sendToFeed("debug", "polling status");
 
-    let master = await cache.mGuild.members.get(config.discord.master);
+    let master = await cache.mGuild.member(config.discord.master);
 
     if( master.presence ){
-      if( master.presence.game ){
-        steam.gamesPlayed(master.presence.game.name);
-      }
-      else {
-        steam.gamesPlayed(0);
-      }
-
       let nick = master.displayName;
 
       switch(master.presence.status){
@@ -359,6 +352,19 @@
           break;
         default:
           steam.setPersona(Steam.EPersonaState.Online, nick);
+      }
+
+      let setActivity = false;
+
+      for( let activity of master.presence.activities ){
+        if( activity.type == "PLAYING" ){
+          steam.gamesPlayed(activity.name);
+          setActivity = true;
+        }
+      }
+
+      if( ! setActivity ){
+        steam.gamesPlayed(0);
       }
     }
   }, 5000);
@@ -510,8 +516,8 @@
       let chats = database.get("chats", {});
 
       Object.keys(chats).forEach((i, j) => {
-        setTimeout(() => {
-          let chan = discord.channels.get(chats[i].chan);
+        setTimeout(async () => {
+          let chan = await discord.channels.fetch(chats[i].chan);
           chan.setTopic(util.personaOrbs[(steam.users[i] && steam.users[i].persona_state) ? steam.users[i].persona_state : 0] + " " + (steam.users[i] ? steam.users[i].player_name : i) + "\nhttps://steamcommunity.com/profiles/" + i);
         }, 2000 * j);
       });
@@ -541,7 +547,7 @@
     setInterval(async () => {
       if( ! database.get("friendchan", false) ) return;
 
-      let message = (await discord.channels.get(database.get("friendchan")).fetchMessages({ around: database.get("friendmsg"), limit: 1 })).first();
+      let message = await (await discord.channels.fetch(database.get("friendchan"))).messages.fetch(database.get("friendmsg"));
 
       message.edit("", { embed: util.getFriendList() });
 
@@ -585,7 +591,7 @@
             }).join(", ");
           });
 
-          let msg = await discord.channels.get(database.get("offers")).send("", {
+          let msg = (await discord.channels.fetch(database.get("offers"))).send("", {
             embed: {
               title: them.personaName + " offered you a trade:",
               url: "https://steamcommunity.com/tradeoffer/" + offer.id,
