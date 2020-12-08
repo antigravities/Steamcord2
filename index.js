@@ -209,17 +209,20 @@
 
     util.notifications[type] = count;
 
+    let description = 
+      (util.notifications.comments > 0 ? "[" + util.notifications.comments + " new comments](https://steamcommunity.com/my/commentnotifications)\n" : "") +
+      (util.notifications.items > 0 ? "[" + util.notifications.items + " new items](https://steamcommunity.com/my/inventory)\n" : "") +
+      (util.notifications.invites > 0 ? "[" + util.notifications.invites + " new invites](https://steamcommunity.com/my/home/invites)\n" : "") +
+      (util.notifications.offers > 0 ? "[" + util.notifications.offers + " new trade offers](https://steamcommunity.com/my/tradeoffers)\n" : "") +
+      (util.notifications.offline > 0 ? util.notifications.offline + " unread messages\n" : "") +
+      (util.notifications.community > 0 ? util.notifications.community + " community moderation messages" : "")
+
+    if( description.length < 1 ) description = "All clean! Nothing to see here...";
+
     await message.edit("", {
       embed: {
         title: "Steam Notifications",
-        description: (
-          (util.notifications.comments > 0 ? "[" + util.notifications.comments + " new comments](https://steamcommunity.com/my/commentnotifications)\n" : "") +
-          (util.notifications.items > 0 ? "[" + util.notifications.items + " new items](https://steamcommunity.com/my/inventory)\n" : "") +
-          (util.notifications.invites > 0 ? "[" + util.notifications.invites + " new invites](https://steamcommunity.com/my/home/invites)\n" : "") +
-          (util.notifications.offers > 0 ? "[" + util.notifications.offers + " new trade offers](https://steamcommunity.com/my/tradeoffers)\n" : "") +
-          (util.notifications.offline > 0 ? util.notifications.offline + " unread messages\n" : "") +
-          (util.notifications.community > 0 ? util.notifications.community + " community moderation messages" : "")
-        )
+        description
       }
     });
   };
