@@ -28,7 +28,7 @@
   const Cheerio = require("cheerio");
 
   const discord = new Discord.Client();
-  const steam = new Steam({ promptSteamGuardCode: false });
+  const steam = new Steam({ promptSteamGuardCode: false, enablePicsCache: true });
 
   const Commands = require("./commands.js");
 
@@ -46,6 +46,7 @@
   cache.aoffers = [];
   cache.feedLastMessages = {};
   cache.cookies = null;
+  cache.sessionid = null;
 
   // -----------
 
@@ -62,6 +63,8 @@
   };
 
   // -----------
+
+  const months = [ "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" ];
 
   let util = {};
 
@@ -338,6 +341,11 @@
         }
       }, 1000);
     });
+  }
+
+  // format a date like 18 December 2019, 9:25 PM
+  util.formatDate = date => {
+    return date.getDate() + " " + months[date.getMonth()] + " " + date.getFullYear() + ", " + date.getHours()%12 + ":" + date.getMinutes() + " " + (date.getHours()/12 >= 1 ? "PM" : "AM");
   }
 
   // -----------
@@ -718,6 +726,7 @@
 
   steam.on("webSession", (sid, cookies) => {
     cache.cookies = cookies;
+    cache.sessionid = sid;
 
     let tradeoffers = util.makeOrGetTradeoffers();
     let community = util.makeOrGetCommunity();
