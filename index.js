@@ -1,4 +1,7 @@
 (async () => {
+  console.log("Steamcord");
+  console.log("Copyright (c) 2020 Alexandra Frock, Cutie Cafe");
+
   const fs = require("fs");
 
   if( ! fs.existsSync("config.json") ){
@@ -30,8 +33,7 @@
   const discord = new Discord.Client();
   const steam = new Steam({ promptSteamGuardCode: false, enablePicsCache: true });
 
-  const Commands = require("./commands.js");
-
+  const Commands = (require("./commands"))();
 
   // -----------
 
