@@ -348,6 +348,31 @@
     return date.getDate() + " " + months[date.getMonth()] + " " + date.getFullYear() + ", " + date.getHours()%12 + ":" + date.getMinutes() + " " + (date.getHours()/12 >= 1 ? "PM" : "AM");
   }
 
+  // turns a number into an enum value
+  util.resolveEnum = (enm, number) => {
+    for( let key of Object.keys(enm) ){
+      if( enm[key] == number ) return key;
+    }
+
+    return "";
+  }
+
+  // split a potentially long message into smaller messages
+  util.splitMsg = async (sendMessageFunc, message) => {
+    let messages = [];
+
+    do {
+      messages.push(message.substring(0, 2000));
+      message = message.substring(2000);
+    } while(message.length > 2000);
+
+    for( let message of messages ){
+      await sendMessageFunc(message);
+    }
+
+    return messages;
+  }
+
   // -----------
 
   discord.on("ready", async () => {
