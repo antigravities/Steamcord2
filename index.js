@@ -49,6 +49,7 @@
   cache.feedLastMessages = {};
   cache.cookies = null;
   cache.sessionid = null;
+  cache.uptime = Date.now();
 
   // -----------
 
@@ -347,7 +348,7 @@
 
   // format a date like 18 December 2019, 9:25 PM
   util.formatDate = date => {
-    return date.getDate() + " " + months[date.getMonth()] + " " + date.getFullYear() + ", " + date.getHours()%12 + ":" + date.getMinutes() + " " + (date.getHours()/12 >= 1 ? "PM" : "AM");
+    return date.getDate() + " " + months[date.getMonth()] + " " + date.getFullYear() + ", " + date.getHours()%12 + ":" + (date.getMinutes() < 10 ? "0" : "") + date.getMinutes() + " " + (date.getHours()/12 >= 1 ? "PM" : "AM");
   }
 
   // turns a number into an enum value
@@ -472,9 +473,15 @@
         rcv: rcv
       };
 
-      let response = Commands[command[0]] ? (await Commands[command[0]](pkg)) : (await Commands.unknown(pkg));
+      let response;
 
-      if( typeof response === 'string' ) message.reply(response);
+      try {
+        response = Commands[command[0]] ? (await Commands[command[0]](pkg)) : (await Commands.unknown(pkg));
+
+        if( typeof response === 'string' ) message.reply(response);
+      } catch(e){
+        message.reply("Error executing command:\n" + e.stack);
+      }
     } else {
       let steamid = util.getSteamIDFromChan(message.channel);
 
@@ -569,7 +576,7 @@
   steam.on("steamGuard", (domain, callback) => {
     cache.needs2FA = callback;
     discord.user.setActivity("Waiting for 2FA code");
-    util.sendToFeed("connect", { title: "Waiting for 2FA code", description: "Please enter your Steam Guard code " + (domain ? "that was sent to your e-mail address at " + domain : "from your Mobile Authenticator") + " by typing ~2fa [code]." });
+    util.sendToFeed("connect", "2FA code required: please enter your Steam Guard code " + (domain ? "that was sent to your e-mail address at " + domain : "from your Mobile Authenticator") + " by typing ~2fa [code].")
   });
 
   steam.on("loggedOn", async() => {
@@ -577,7 +584,7 @@
 
     let tradeoffers = util.makeOrGetTradeoffers();
 
-    if( cache.feedLastMessages.connect ) await cache.feedLastMessages.connect.edit("", { embed: { title: "2FA code accepted", description: "✅ Logged on!" } });
+    if( cache.feedLastMessages.connect ) await util.sendToFeed("connect", "2FA code accepted: you are now logged on.");
 
     cache.needs2FA = false;
     cache.steamReady = true;
